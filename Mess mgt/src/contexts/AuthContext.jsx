@@ -28,7 +28,7 @@ export const AuthProvider = ({ children }) => {
         'manager@example.com': { id: '9', role: 'staff', name: 'Mess Manager' }
       };
 
-      if (mockUsers[email] && password === 'password123') {
+      if (mockUsers[email] && password === '7410') {
         setUser(mockUsers[email]);
         return true;
       }
