@@ -1,14 +1,23 @@
-
-
 import React, { useState } from 'react';
 import { Calendar, Clock, ThumbsUp, ThumbsDown, ChefHat, Utensils, Users, LineChart, Bell } from 'lucide-react';
-import MealCard  from './components/MealCard';
-import DailyStats  from './components/DailyStats';
-import  FeedbackChart  from './components/FeedbackChart';
+import MealCard from './components/MealCard';
+import DailyStats from './components/DailyStats';
+import FeedbackChart from './components/FeedbackChart';
+import ProtectedRoute from './components/ProtectedRoute';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import WeeklyMenuManager from './components/WeeklyMenuManager';
+import StockManager from './components/StockManager';
 
 function App() {
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
+}
+
+function AppContent() {
+  const { isAuthenticated, user, logout } = useAuth();
 
   const meals = [
     {
@@ -41,8 +50,8 @@ function App() {
     }
   ];
 
-  if (!isAuthenticated) {
-    return <LoginScreen onLogin={() => setIsAuthenticated(true)} />;
+  if (!isAuthenticated()) {
+    return <LoginScreen />;
   }
 
   return (
@@ -55,14 +64,9 @@ function App() {
               <span className="ml-2 text-xl font-semibold text-gray-900">MessMaster</span>
             </div>
             <div className="flex items-center space-x-4">
+              <span className="text-gray-600">Welcome, {user.name}</span>
               <button
-                onClick={() => setIsAdmin(!isAdmin)}
-                className="text-gray-600 hover:text-gray-900"
-              >
-                {isAdmin ? 'Switch to Student View' : 'Switch to Admin View'}
-              </button>
-              <button
-                onClick={() => setIsAuthenticated(false)}
+                onClick={logout}
                 className="bg-orange-500 text-white px-4 py-2 rounded-md hover:bg-orange-600"
               >
                 Logout
@@ -73,17 +77,35 @@ function App() {
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {isAdmin ? (
-          <AdminDashboard />
+        {user.role === 'admin' ? (
+          <ProtectedRoute allowedRoles={['admin']}>
+            <AdminDashboard />
+          </ProtectedRoute>
         ) : (
-          <StudentDashboard meals={meals} />
+          <ProtectedRoute allowedRoles={['student']}>
+            <StudentDashboard meals={meals} />
+          </ProtectedRoute>
         )}
       </main>
     </div>
   );
 }
 
-function LoginScreen({ onLogin }) {
+function LoginScreen() {
+  const { login, loading } = useAuth();
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [error, setError] = React.useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    const success = await login(email, password);
+    if (!success) {
+      setError('Invalid email or password');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
@@ -95,7 +117,12 @@ function LoginScreen({ onLogin }) {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
-          <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); onLogin(); }}>
+          {error && (
+            <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
+              {error}
+            </div>
+          )}
+          <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">
                 Email address
@@ -106,6 +133,8 @@ function LoginScreen({ onLogin }) {
                   name="email"
                   type="email"
                   required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-orange-500 focus:border-orange-500"
                 />
               </div>
@@ -121,6 +150,8 @@ function LoginScreen({ onLogin }) {
                   name="password"
                   type="password"
                   required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-orange-500 focus:border-orange-500"
                 />
               </div>
@@ -129,9 +160,10 @@ function LoginScreen({ onLogin }) {
             <div>
               <button
                 type="submit"
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
+                disabled={loading}
+                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50"
               >
-                Sign in
+                {loading ? 'Signing in...' : 'Sign in'}
               </button>
             </div>
           </form>
@@ -159,61 +191,84 @@ function StudentDashboard({ meals }) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-1 mt-8">
         <DailyStats />
-        {/* <FeedbackChart /> */}
+        <FeedbackChart />
       </div>
     </div>
   );
 }
 
 function AdminDashboard() {
+  const [showMenuManager, setShowMenuManager] = useState(false);
+  const [showStockManager, setShowStockManager] = useState(false);
+
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
         <div className="flex space-x-4">
-          <button className="bg-orange-500 text-white px-4 py-2 rounded-md hover:bg-orange-600">
-            Update Menu
+          <button 
+            onClick={() => {
+              setShowMenuManager(!showMenuManager);
+              setShowStockManager(false);
+            }}
+            className="bg-orange-500 text-white px-4 py-2 rounded-md hover:bg-orange-600"
+          >
+            {showMenuManager ? 'Hide Menu Manager' : 'Update Menu'}
           </button>
-          <button className="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600">
-            Add Stock
+          <button 
+            onClick={() => {
+              setShowStockManager(!showStockManager);
+              setShowMenuManager(false);
+            }}
+            className="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600"
+          >
+            {showStockManager ? 'Hide Stock Manager' : 'Add Stock'}
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard icon={Users} title="Total Students" value="1,234" />
-        <StatCard icon={Utensils} title="Today's Bookings" value="987" />
-        <StatCard icon={LineChart} title="Feedback Score" value="4.5/5" />
-        <StatCard icon={Bell} title="Low Stock Items" value="3" className="text-red-500" />
-      </div>
+      {showMenuManager ? (
+        <WeeklyMenuManager />
+      ) : showStockManager ? (
+        <StockManager />
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <StatCard icon={Users} title="Total Students" value="1,234" />
+            <StatCard icon={Utensils} title="Today's Bookings" value="987" />
+            <StatCard icon={LineChart} title="Feedback Score" value="4.5/5" />
+            <StatCard icon={Bell} title="Low Stock Items" value="3" className="text-red-500" />
+          </div>
 
-      <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Today's Overview</h2>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead>
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Meal</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bookings</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Served</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wastage</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Feedback</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {['Breakfast', 'Lunch', 'Snacks', 'Dinner'].map((meal) => (
-                <tr key={meal}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{meal}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">245</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">238</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">2.8%</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">4.2/5</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+          <div className="bg-white shadow rounded-lg p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Today's Overview</h2>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead>
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Meal</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bookings</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Served</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wastage</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Feedback</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {['Breakfast', 'Lunch', 'Snacks', 'Dinner'].map((meal) => (
+                    <tr key={meal}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{meal}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">245</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">238</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">2.8%</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">4.2/5</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -234,4 +289,4 @@ function StatCard({ icon: Icon, title, value, className = "" }) {
   );
 }
 
-export default App; 
+export default App;
