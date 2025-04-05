@@ -191,7 +191,7 @@ function StudentDashboard({ meals }) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-1 mt-8">
         <DailyStats />
-        <FeedbackChart />
+        {/* <FeedbackChart /> */}
       </div>
     </div>
   );
